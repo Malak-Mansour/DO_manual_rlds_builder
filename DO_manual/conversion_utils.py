@@ -52,8 +52,9 @@ class MultiThreadedDatasetBuilder(tfds.core.GeneratorBasedBuilder):
             max_examples_per_split=download_config.max_examples_per_split,
             beam_options=download_config.beam_options,
             beam_runner=download_config.beam_runner,
-            file_format=self.info.file_format,
-            shard_config=download_config.get_shard_config(),
+            # file_format=self.info.file_format,
+            # shard_config=download_config.get_shard_config(),
+            example_writer_fn=lambda **kwargs: writer_lib.Writer(**kwargs), # <-- add this
             split_paths=self._split_paths(),
             parse_function=type(self).PARSE_FCN,
             n_workers=self.N_WORKERS,
@@ -90,6 +91,7 @@ class MultiThreadedDatasetBuilder(tfds.core.GeneratorBasedBuilder):
                 generator=generator,
                 filename_template=filename_template,
                 disable_shuffling=self.info.disable_shuffling,
+                nondeterministic_order=False  # ✅ Required in latest TFDS
             )
             split_info_futures.append(future)
 
@@ -133,8 +135,30 @@ def parse_examples_from_generator(paths, fcn, split_name, total_num_examples, fe
 
 
 class ParallelSplitBuilder(split_builder_lib.SplitBuilder):
-    def __init__(self, *args, split_paths, parse_function, n_workers, max_paths_in_memory, **kwargs):
-        super().__init__(*args, **kwargs)
+    # def __init__(self, *args, split_paths, parse_function, n_workers, max_paths_in_memory, **kwargs):
+    def __init__(self, *,
+                 split_dict,
+                 features,
+                 dataset_size,
+                 max_examples_per_split,
+                 beam_options,
+                 beam_runner,
+                 example_writer_fn,  # <-- required!
+                 split_paths,
+                 parse_function,
+                 n_workers,
+                 max_paths_in_memory):
+        # super().__init__(*args, **kwargs)
+        super().__init__(
+            split_dict=split_dict,
+            features=features,
+            dataset_size=dataset_size,
+            max_examples_per_split=max_examples_per_split,
+            beam_options=beam_options,
+            beam_runner=beam_runner,
+            example_writer=example_writer_fn,  # <-- new!
+        )
+        self._example_writer = example_writer_fn  # ✅ store it
         self._split_paths = split_paths
         self._parse_function = parse_function
         self._n_workers = n_workers
@@ -160,13 +184,15 @@ class ParallelSplitBuilder(split_builder_lib.SplitBuilder):
         """
         total_num_examples = None
         serialized_info = self._features.get_serialized_info()
-        writer = writer_lib.Writer(
+        # writer = writer_lib.Writer(
+        writer = self._example_writer(
+            example_writer=None,  # ✅ required dummy arg
             serializer=example_serializer.ExampleSerializer(serialized_info),
             filename_template=filename_template,
             hash_salt=split_name,
             disable_shuffling=disable_shuffling,
-            file_format=self._file_format,
-            shard_config=self._shard_config,
+            # file_format=self._file_format,
+            # shard_config=self._shard_config,
         )
 
         del generator  # use parallel generators instead
