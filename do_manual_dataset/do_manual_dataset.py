@@ -43,62 +43,72 @@ import tensorflow as tf
 import tensorflow_datasets as tfds
 from conversion_utils import MultiThreadedDatasetBuilder
 
+
 def _generate_examples(paths) -> Iterator[Tuple[str, Any]]:
     """Yields episodes from DO_manual dataset paths."""
+    for episode_idx, episode_path in enumerate(paths):
+        try:
+            with h5py.File(episode_path, "r") as F:
+                # Collect all step keys sorted by index
+                step_keys = sorted(
+                    [k for k in F.keys() if k.startswith("step_")],
+                    key=lambda x: int(x.split("_")[1])
+                )
+                
+                if not step_keys:
+                    continue  # Skip empty files
 
-    def _parse_example(episode_path):
-        with h5py.File(episode_path, "r") as F:
-            # Collect all step keys sorted by index
-            step_keys = sorted(
-                [k for k in F.keys() if k.startswith("step_")],
-                key=lambda x: int(x.split("_")[1])
-            )
+                episode = []
+                for i, step_key in enumerate(step_keys):
+                    try:
+                        obs = F[f"{step_key}/observation"]
 
-            episode = []
-            for i, step_key in enumerate(step_keys):
-                obs = F[f"{step_key}/observation"]
+                        # Extract camera image
+                        image = obs["camera/image"][()]
 
-                # Extract camera image
-                image = obs["camera/image"][()]
+                        # Extract all right arm sensors
+                        joint_pose = obs["right/joint_pose"][()]
+                        qpose_euler = obs["right/qpose_euler"][()]
+                        qpose_quat = obs["right/qpose_quat"][()]
+                        tip_state = obs["right/tip_state"][()]
 
-                # Extract all right arm sensors
-                joint_pose = obs["right/joint_pose"][()]
-                qpose_euler = obs["right/qpose_euler"][()]
-                qpose_quat = obs["right/qpose_quat"][()]
-                tip_state = obs["right/tip_state"][()]
+                        # Combine all state values into one vector
+                        robot_state = np.concatenate([
+                            joint_pose, qpose_euler, qpose_quat, tip_state
+                        ], axis=0).astype(np.float32)
 
-                # Combine all state values into one vector
-                robot_state = np.concatenate([
-                    joint_pose, qpose_euler, qpose_quat, tip_state
-                ], axis=0).astype(np.float32)
+                        # Append step
+                        episode.append({
+                            'observation': {
+                                'image': image,
+                                'state': robot_state,
+                                'joint_state': joint_pose.astype(np.float32),
+                            },
+                            'action': np.zeros_like(joint_pose, dtype=np.float32),  # Placeholder
+                            'discount': 1.0,
+                            'reward': float(i == (len(step_keys) - 1)),
+                            'is_first': i == 0,
+                            'is_last': i == (len(step_keys) - 1),
+                            'is_terminal': i == (len(step_keys) - 1),
+                            'language_instruction': "Default instruction",
+                        })
+                    except Exception as e:
+                        print(f"Error processing step {step_key} in {episode_path}: {e}")
+                        continue
 
-                # Append step
-                episode.append({
-                    'observation': {
-                        'image': image,
-                        'state': robot_state,
-                        'joint_state': joint_pose.astype(np.float32),
-                    },
-                    'action': np.zeros_like(joint_pose, dtype=np.float32),  # Placeholder
-                    'discount': 1.0,
-                    'reward': float(i == (len(step_keys) - 1)),
-                    'is_first': i == 0,
-                    'is_last': i == (len(step_keys) - 1),
-                    'is_terminal': i == (len(step_keys) - 1),
-                    'language_instruction': "Default instruction",
-                })
-
-        sample = {
-            'steps': episode,
-            'episode_metadata': {
-                'file_path': episode_path
-            }
-        }
-
-        return episode_path, sample
-
-    for sample in paths:
-        yield _parse_example(sample)
+                if episode:  # Only yield if we have valid steps
+                    sample = {
+                        'steps': episode,
+                        'episode_metadata': {
+                            'file_path': episode_path
+                        }
+                    }
+                    # Use unique string key (episode number) for each example
+                    yield f"episode_{episode_idx}", sample
+                    
+        except Exception as e:
+            print(f"Error processing file {episode_path}: {e}")
+            continue
 
 
 class DoManualDataset(MultiThreadedDatasetBuilder):
@@ -187,3 +197,4 @@ class DoManualDataset(MultiThreadedDatasetBuilder):
         }
 
 # print("DoManualDataset loaded:", DoManualDataset)
+    DATASET_CLASS = DoManualDataset

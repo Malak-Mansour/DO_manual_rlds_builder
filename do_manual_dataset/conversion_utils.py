@@ -25,6 +25,18 @@ Example = Dict[str, Any]
 KeyExample = Tuple[Key, Example]
 
 
+def get_writer(features, filename_template, hash_salt, disable_shuffling, file_format):
+    """Helper function to get a TFDS writer."""
+    serialized_info = features.get_serialized_info()
+    return writer_lib.Writer(
+        serializer=example_serializer.ExampleSerializer(serialized_info),
+        filename_template=filename_template,
+        hash_salt=hash_salt,
+        disable_shuffling=disable_shuffling,
+        file_format=file_format,
+    )
+
+    
 class MultiThreadedDatasetBuilder(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for example dataset."""
     N_WORKERS = 10                  # number of parallel workers for data conversion
@@ -32,18 +44,6 @@ class MultiThreadedDatasetBuilder(tfds.core.GeneratorBasedBuilder):
                                     # -> the higher the faster / more parallel conversion, adjust based on avilable RAM
                                     # note that one path may yield multiple episodes and adjust accordingly
     PARSE_FCN = None                # needs to be filled with path-to-record-episode parse function
-
-
-    def get_writer(features, filename_template, hash_salt, disable_shuffling, file_format):
-        """Helper function to get a TFDS writer."""
-        serialized_info = features.get_serialized_info()
-        return writer_lib.Writer(
-            serializer=example_serializer.ExampleSerializer(serialized_info),
-            filename_template=filename_template,
-            hash_salt=hash_salt,
-            disable_shuffling=disable_shuffling,
-            file_format=file_format,
-        )
 
 
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
