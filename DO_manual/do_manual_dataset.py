@@ -1,3 +1,33 @@
+'''
+/step_0/  
+    action/
+        base #3x1
+        extra/
+            buttons/
+        left
+        right
+
+
+        observation/     
+
+            camera/ 
+                image #resolution: 320x240   
+
+            right/  
+
+                joint_pose #7x1  
+                qpose_euler #6x1  
+
+                qpose_quat #7x1  
+
+                tip_state #1x1 
+
+
+
+tfds build do_manual_dataset --imports DO_manual --overwrite
+
+'''
+
 from typing import Iterator, Tuple, Any
 import os
 import h5py
@@ -5,8 +35,7 @@ import glob
 import numpy as np
 import tensorflow as tf
 import tensorflow_datasets as tfds
-from DO_manual.conversion_utils import MultiThreadedDatasetBuilder
-
+from do_manual_dataset.conversion_utils import MultiThreadedDatasetBuilder
 
 def _generate_examples(paths) -> Iterator[Tuple[str, Any]]:
     """Yields episodes from DO_manual dataset paths."""
@@ -24,7 +53,7 @@ def _generate_examples(paths) -> Iterator[Tuple[str, Any]]:
                 obs = F[f"{step_key}/observation"]
 
                 # Extract camera image
-                image = obs["camera"][()]
+                image = obs["camera/image"][()]
 
                 # Extract all right arm sensors
                 joint_pose = obs["right/joint_pose"][()]
@@ -33,7 +62,9 @@ def _generate_examples(paths) -> Iterator[Tuple[str, Any]]:
                 tip_state = obs["right/tip_state"][()]
 
                 # Combine all state values into one vector
-                robot_state = np.concatenate([joint_pose, qpose_euler, qpose_quat, tip_state], axis=0).astype(np.float32)
+                robot_state = np.concatenate([
+                    joint_pose, qpose_euler, qpose_quat, tip_state
+                ], axis=0).astype(np.float32)
 
                 # Append step
                 episode.append({
@@ -42,13 +73,13 @@ def _generate_examples(paths) -> Iterator[Tuple[str, Any]]:
                         'state': robot_state,
                         'joint_state': joint_pose.astype(np.float32),
                     },
-                    'action': np.zeros_like(joint_pose, dtype=np.float32),  # Placeholder, update if available
+                    'action': np.zeros_like(joint_pose, dtype=np.float32),  # Placeholder
                     'discount': 1.0,
                     'reward': float(i == (len(step_keys) - 1)),
                     'is_first': i == 0,
                     'is_last': i == (len(step_keys) - 1),
                     'is_terminal': i == (len(step_keys) - 1),
-                    'language_instruction': "Default instruction",  # You can replace with parsed task info
+                    'language_instruction': "Default instruction",
                 })
 
         sample = {
@@ -64,7 +95,7 @@ def _generate_examples(paths) -> Iterator[Tuple[str, Any]]:
         yield _parse_example(sample)
 
 
-class DOManualDataset(MultiThreadedDatasetBuilder):
+class DoManualDataset(MultiThreadedDatasetBuilder):
     """DatasetBuilder for DO_manual dataset."""
 
     VERSION = tfds.core.Version('1.0.0')
@@ -137,5 +168,5 @@ class DOManualDataset(MultiThreadedDatasetBuilder):
 
     def _split_paths(self):
         return {
-            "train": glob.glob("DO_manual_dataset/*.hdf5"),  # <-- Update this path
+            "train": glob.glob("D:\Malak Doc\Malak Education\MBZUAI\Academic years\Spring 2025\ICL\DO_manual_rlds_builder\DO_manual\DO_manual\*.hdf5"),
         }
