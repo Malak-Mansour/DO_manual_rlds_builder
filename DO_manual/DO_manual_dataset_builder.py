@@ -1,150 +1,141 @@
 from typing import Iterator, Tuple, Any
-
+import os
+import h5py
 import glob
 import numpy as np
 import tensorflow as tf
 import tensorflow_datasets as tfds
-import tensorflow_hub as hub
+from DO_manual.conversion_utils import MultiThreadedDatasetBuilder
 
 
-class DOManual(tfds.core.GeneratorBasedBuilder):
-    """DatasetBuilder for example dataset."""
+def _generate_examples(paths) -> Iterator[Tuple[str, Any]]:
+    """Yields episodes from DO_manual dataset paths."""
+
+    def _parse_example(episode_path):
+        with h5py.File(episode_path, "r") as F:
+            # Collect all step keys sorted by index
+            step_keys = sorted(
+                [k for k in F.keys() if k.startswith("step_")],
+                key=lambda x: int(x.split("_")[1])
+            )
+
+            episode = []
+            for i, step_key in enumerate(step_keys):
+                obs = F[f"{step_key}/observation"]
+
+                # Extract camera image
+                image = obs["camera"][()]
+
+                # Extract all right arm sensors
+                joint_pose = obs["right/joint_pose"][()]
+                qpose_euler = obs["right/qpose_euler"][()]
+                qpose_quat = obs["right/qpose_quat"][()]
+                tip_state = obs["right/tip_state"][()]
+
+                # Combine all state values into one vector
+                robot_state = np.concatenate([joint_pose, qpose_euler, qpose_quat, tip_state], axis=0).astype(np.float32)
+
+                # Append step
+                episode.append({
+                    'observation': {
+                        'image': image[::-1, ::-1],  # Flip vertically and horizontally if needed
+                        'state': robot_state,
+                        'joint_state': joint_pose.astype(np.float32),
+                    },
+                    'action': np.zeros_like(joint_pose, dtype=np.float32),  # Placeholder, update if available
+                    'discount': 1.0,
+                    'reward': float(i == (len(step_keys) - 1)),
+                    'is_first': i == 0,
+                    'is_last': i == (len(step_keys) - 1),
+                    'is_terminal': i == (len(step_keys) - 1),
+                    'language_instruction': "Default instruction",  # You can replace with parsed task info
+                })
+
+        sample = {
+            'steps': episode,
+            'episode_metadata': {
+                'file_path': episode_path
+            }
+        }
+
+        return episode_path, sample
+
+    for sample in paths:
+        yield _parse_example(sample)
+
+
+class DOManualDataset(MultiThreadedDatasetBuilder):
+    """DatasetBuilder for DO_manual dataset."""
 
     VERSION = tfds.core.Version('1.0.0')
     RELEASE_NOTES = {
-      '1.0.0': 'Initial release.',
+        '1.0.0': 'Initial release for DO_manual dataset.',
     }
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._embed = hub.load("https://tfhub.dev/google/universal-sentence-encoder-large/5")
+    N_WORKERS = 20
+    MAX_PATHS_IN_MEMORY = 50
+    PARSE_FCN = _generate_examples
 
     def _info(self) -> tfds.core.DatasetInfo:
-        """Dataset metadata (homepage, citation,...)."""
         return self.dataset_info_from_configs(
             features=tfds.features.FeaturesDict({
                 'steps': tfds.features.Dataset({
                     'observation': tfds.features.FeaturesDict({
                         'image': tfds.features.Image(
-                            shape=(64, 64, 3),
+                            shape=(320, 240, 3),
                             dtype=np.uint8,
-                            encoding_format='png',
-                            doc='Main camera RGB observation.',
-                        ),
-                        'wrist_image': tfds.features.Image(
-                            shape=(64, 64, 3),
-                            dtype=np.uint8,
-                            encoding_format='png',
-                            doc='Wrist camera RGB observation.',
+                            encoding_format='jpeg',
+                            doc='Camera RGB image (flipped).',
                         ),
                         'state': tfds.features.Tensor(
-                            shape=(10,),
+                            shape=(21,),
                             dtype=np.float32,
-                            doc='Robot state, consists of [7x robot joint angles, '
-                                '2x gripper position, 1x door opening angle].',
-                        )
+                            doc='Concatenated robot state: joint_pose (7), qpose_euler (6), qpose_quat (7), tip_state (1).',
+                        ),
+                        'joint_state': tfds.features.Tensor(
+                            shape=(7,),
+                            dtype=np.float32,
+                            doc='Joint pose of the robot arm.',
+                        ),
                     }),
                     'action': tfds.features.Tensor(
-                        shape=(10,),
+                        shape=(7,),
                         dtype=np.float32,
-                        doc='Robot action, consists of [7x joint velocities, '
-                            '2x gripper velocities, 1x terminate episode].',
+                        doc='Placeholder action vector.',
                     ),
                     'discount': tfds.features.Scalar(
                         dtype=np.float32,
-                        doc='Discount if provided, default to 1.'
+                        doc='Always 1.0 for demonstration data.',
                     ),
                     'reward': tfds.features.Scalar(
                         dtype=np.float32,
-                        doc='Reward if provided, 1 on final step for demos.'
+                        doc='Reward of 1.0 at the final step only.',
                     ),
                     'is_first': tfds.features.Scalar(
                         dtype=np.bool_,
-                        doc='True on first step of the episode.'
+                        doc='True if this is the first step of the episode.',
                     ),
                     'is_last': tfds.features.Scalar(
                         dtype=np.bool_,
-                        doc='True on last step of the episode.'
+                        doc='True if this is the last step of the episode.',
                     ),
                     'is_terminal': tfds.features.Scalar(
                         dtype=np.bool_,
-                        doc='True on last step of the episode if it is a terminal step, True for demos.'
+                        doc='True for terminal steps (last step in demos).',
                     ),
                     'language_instruction': tfds.features.Text(
-                        doc='Language Instruction.'
-                    ),
-                    'language_embedding': tfds.features.Tensor(
-                        shape=(512,),
-                        dtype=np.float32,
-                        doc='Kona language embedding. '
-                            'See https://tfhub.dev/google/universal-sentence-encoder-large/5'
+                        doc='Language instruction for the task (static placeholder).',
                     ),
                 }),
                 'episode_metadata': tfds.features.FeaturesDict({
                     'file_path': tfds.features.Text(
-                        doc='Path to the original data file.'
+                        doc='Original file path of the episode.',
                     ),
                 }),
-            }))
+            })
+        )
 
-    def _split_generators(self, dl_manager: tfds.download.DownloadManager):
-        """Define data splits."""
+    def _split_paths(self):
         return {
-            'train': self._generate_examples(path='data/train/episode_*.npy'),
-            'val': self._generate_examples(path='data/val/episode_*.npy'),
+            "train": glob.glob("DO_manual_dataset/*.hdf5"),  # <-- Update this path
         }
-
-    def _generate_examples(self, path) -> Iterator[Tuple[str, Any]]:
-        """Generator of examples for each split."""
-
-        def _parse_example(episode_path):
-            # load raw data --> this should change for your dataset
-            data = np.load(episode_path, allow_pickle=True)     # this is a list of dicts in our case
-
-            # assemble episode --> here we're assuming demos so we set reward to 1 at the end
-            episode = []
-            for i, step in enumerate(data):
-                # compute Kona language embedding
-                language_embedding = self._embed([step['language_instruction']])[0].numpy()
-
-                episode.append({
-                    'observation': {
-                        'image': step['image'],
-                        'wrist_image': step['wrist_image'],
-                        'state': step['state'],
-                    },
-                    'action': step['action'],
-                    'discount': 1.0,
-                    'reward': float(i == (len(data) - 1)),
-                    'is_first': i == 0,
-                    'is_last': i == (len(data) - 1),
-                    'is_terminal': i == (len(data) - 1),
-                    'language_instruction': step['language_instruction'],
-                    'language_embedding': language_embedding,
-                })
-
-            # create output data sample
-            sample = {
-                'steps': episode,
-                'episode_metadata': {
-                    'file_path': episode_path
-                }
-            }
-
-            # if you want to skip an example for whatever reason, simply return None
-            return episode_path, sample
-
-        # create list of all examples
-        episode_paths = glob.glob(path)
-
-        # for smallish datasets, use single-thread parsing
-        for sample in episode_paths:
-            yield _parse_example(sample)
-
-        # for large datasets use beam to parallelize data parsing (this will have initialization overhead)
-        # beam = tfds.core.lazy_imports.apache_beam
-        # return (
-        #         beam.Create(episode_paths)
-        #         | beam.Map(_parse_example)
-        # )
-

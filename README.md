@@ -18,6 +18,10 @@ conda activate rlds_env
 
 If you want to manually create an environment, the key packages to install are `tensorflow`, 
 `tensorflow_datasets`, `tensorflow_hub`, `apache_beam`, `matplotlib`, `plotly` and `wandb`.
+```
+pip install tensorflow tensorflow-datasets tensorflow-hub apache-beam matplotlib plotly wandb
+python -m tensorflow_datasets.scripts.cli.build --overwrite
+```
 
 
 ## Run Example RLDS Dataset Creation

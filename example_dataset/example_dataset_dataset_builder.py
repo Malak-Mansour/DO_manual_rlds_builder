@@ -1,19 +1,18 @@
 from typing import Iterator, Tuple, Any
+
 import glob
 import numpy as np
 import tensorflow as tf
 import tensorflow_datasets as tfds
 import tensorflow_hub as hub
-import h5py
-import os
 
 
-class DOManual(tfds.core.GeneratorBasedBuilder):
-    """DatasetBuilder for DOManual HDF5-based teleoperation dataset."""
+class ExampleDataset(tfds.core.GeneratorBasedBuilder):
+    """DatasetBuilder for example dataset."""
 
     VERSION = tfds.core.Version('1.0.0')
     RELEASE_NOTES = {
-        '1.0.0': 'Initial release.',
+      '1.0.0': 'Initial release.',
     }
 
     def __init__(self, *args, **kwargs):
@@ -27,27 +26,29 @@ class DOManual(tfds.core.GeneratorBasedBuilder):
                 'steps': tfds.features.Dataset({
                     'observation': tfds.features.FeaturesDict({
                         'image': tfds.features.Image(
-                            shape=(240, 320, 3),  # 320x240 RGB
+                            shape=(64, 64, 3),
                             dtype=np.uint8,
                             encoding_format='png',
                             doc='Main camera RGB observation.',
                         ),
                         'wrist_image': tfds.features.Image(
-                            shape=(1,),  # dummy since we dont have wrist images
+                            shape=(64, 64, 3),
                             dtype=np.uint8,
                             encoding_format='png',
-                            doc='wrist_image: Dummy value for RLDS compliance.',
+                            doc='Wrist camera RGB observation.',
                         ),
                         'state': tfds.features.Tensor(
-                            shape=(1,),
+                            shape=(10,),
                             dtype=np.float32,
-                            doc='state: Dummy value for RLDS compliance.',
+                            doc='Robot state, consists of [7x robot joint angles, '
+                                '2x gripper position, 1x door opening angle].',
                         )
                     }),
                     'action': tfds.features.Tensor(
                         shape=(10,),
                         dtype=np.float32,
-                        doc='Robot action consisting of [6x pose euler, 1x tip state, 3x padding or future extension].'
+                        doc='Robot action, consists of [7x joint velocities, '
+                            '2x gripper velocities, 1x terminate episode].',
                     ),
                     'discount': tfds.features.Scalar(
                         dtype=np.float32,
@@ -89,63 +90,60 @@ class DOManual(tfds.core.GeneratorBasedBuilder):
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Define data splits."""
         return {
-            'train': self._generate_examples(path='data/train/episode_*.hdf5'),
-            'val': self._generate_examples(path='data/val/episode_*.hdf5'),
+            'train': self._generate_examples(path='data/train/episode_*.npy'),
+            'val': self._generate_examples(path='data/val/episode_*.npy'),
         }
 
     def _generate_examples(self, path) -> Iterator[Tuple[str, Any]]:
+        """Generator of examples for each split."""
+
+        def _parse_example(episode_path):
+            # load raw data --> this should change for your dataset
+            data = np.load(episode_path, allow_pickle=True)     # this is a list of dicts in our case
+
+            # assemble episode --> here we're assuming demos so we set reward to 1 at the end
+            episode = []
+            for i, step in enumerate(data):
+                # compute Kona language embedding
+                language_embedding = self._embed([step['language_instruction']])[0].numpy()
+
+                episode.append({
+                    'observation': {
+                        'image': step['image'],
+                        'wrist_image': step['wrist_image'],
+                        'state': step['state'],
+                    },
+                    'action': step['action'],
+                    'discount': 1.0,
+                    'reward': float(i == (len(data) - 1)),
+                    'is_first': i == 0,
+                    'is_last': i == (len(data) - 1),
+                    'is_terminal': i == (len(data) - 1),
+                    'language_instruction': step['language_instruction'],
+                    'language_embedding': language_embedding,
+                })
+
+            # create output data sample
+            sample = {
+                'steps': episode,
+                'episode_metadata': {
+                    'file_path': episode_path
+                }
+            }
+
+            # if you want to skip an example for whatever reason, simply return None
+            return episode_path, sample
+
+        # create list of all examples
         episode_paths = glob.glob(path)
 
-        for episode_path in episode_paths:
-            with h5py.File(episode_path, 'r') as f:
-                steps = sorted([k for k in f.keys() if k.startswith('step_')], key=lambda x: int(x.split('_')[1]))
-                episode = []
+        # for smallish datasets, use single-thread parsing
+        for sample in episode_paths:
+            yield _parse_example(sample)
 
-                for i, step_key in enumerate(steps):
-                    obs_group = f[step_key]['observation']
-                    cam_img = obs_group['camera'][()]  # raw image
-                    qpose = obs_group['right']['qpose_euler'][()]
-                    tip_state = obs_group['right']['tip_state'][()]
-                    
-                    # Ensure shape compatibility for tfds
-                    if cam_img.shape != (240, 320, 3):
-                        continue
-
-                    action = np.concatenate([qpose, tip_state, np.zeros(3)], axis=0).astype(np.float32)
-                    
-                    
-                    # language_instruction = "pick up something"
-                    # language_embedding = self._embed([language_instruction])[0].numpy()
-
-                    # Extract language instruction from root of HDF5
-                    raw_instr = f['language_instruction'][()]
-                    if isinstance(raw_instr, bytes):
-                        language_instruction = raw_instr.decode('utf-8')
-                    else:
-                        language_instruction = str(raw_instr)
-
-                    # Embed once for the entire episode
-                    language_embedding = self._embed([language_instruction])[0].numpy()
-
-
-
-                    episode.append({
-                        'observation': {
-                            'image': cam_img,
-                            'wrist_image': np.zeros((1,), dtype=np.uint8),  # dummy
-                            'state': np.zeros((1,), dtype=np.float32)       # dummy
-                        },
-                        'action': action,
-                        'discount': 1.0,
-                        'reward': float(i == len(steps) - 1),
-                        'is_first': i == 0,
-                        'is_last': i == len(steps) - 1,
-                        'is_terminal': i == len(steps) - 1,
-                        'language_instruction': language_instruction,
-                        'language_embedding': language_embedding,
-                    })
-
-                yield os.path.basename(episode_path), {
-                    'steps': episode,
-                    'episode_metadata': {'file_path': episode_path}
-                }
+        # for large datasets use beam to parallelize data parsing (this will have initialization overhead)
+        # beam = tfds.core.lazy_imports.apache_beam
+        # return (
+        #         beam.Create(episode_paths)
+        #         | beam.Map(_parse_example)
+        # )
