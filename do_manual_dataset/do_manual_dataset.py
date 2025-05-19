@@ -113,6 +113,13 @@ class DoManualDataset(MultiThreadedDatasetBuilder):
     MAX_PATHS_IN_MEMORY = 50
     PARSE_FCN = _generate_examples
 
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Set the parse function
+        self.PARSE_FCN = _generate_examples
+
+        
     def _info(self) -> tfds.core.DatasetInfo:
         return self.dataset_info_from_configs(
             features=tfds.features.FeaturesDict({
@@ -172,9 +179,11 @@ class DoManualDataset(MultiThreadedDatasetBuilder):
             })
         )
 
+
+            # "train": glob.glob("D:\Malak Doc\Malak Education\MBZUAI\Academic years\Spring 2025\ICL\DO_manual_rlds_builder\do_manual_dataset\DO_manual_dataset\*.hdf5"),
     def _split_paths(self):
         return {
-            "train": glob.glob("D:\Malak Doc\Malak Education\MBZUAI\Academic years\Spring 2025\ICL\DO_manual_rlds_builder\do_manual_dataset\DO_manual_dataset\*.hdf5"),
+            "train": glob.glob(r"D:/Malak Doc/Malak Education/MBZUAI/Academic years/Spring 2025/ICL/DO_manual_rlds_builder/do_manual_dataset/DO_manual_dataset/*.hdf5"),
         }
 
 # print("DoManualDataset loaded:", DoManualDataset)
