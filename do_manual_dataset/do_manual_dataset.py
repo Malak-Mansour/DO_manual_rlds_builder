@@ -23,8 +23,15 @@
                 tip_state #1x1 
 
 
+tfds build --overwrite
 
-tfds build do_manual_dataset --imports DO_manual --overwrite
+cd DO_manual_rlds_builder/do_manual_dataset
+tfds build do_manual_dataset --imports do_manual_dataset --overwrite
+
+
+cd DO_manual_rlds_builder
+set PYTHONPATH=.
+tfds build do_manual_dataset --overwrite
 
 '''
 
@@ -168,5 +175,5 @@ class DoManualDataset(MultiThreadedDatasetBuilder):
 
     def _split_paths(self):
         return {
-            "train": glob.glob("D:\Malak Doc\Malak Education\MBZUAI\Academic years\Spring 2025\ICL\DO_manual_rlds_builder\DO_manual\DO_manual\*.hdf5"),
+            "train": glob.glob("D:\Malak Doc\Malak Education\MBZUAI\Academic years\Spring 2025\ICL\DO_manual_rlds_builder\do_manual_dataset\DO_manual_dataset\*.hdf5"),
         }
