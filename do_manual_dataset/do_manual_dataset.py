@@ -25,13 +25,12 @@
 
 tfds build --overwrite
 
-cd DO_manual_rlds_builder/do_manual_dataset
-tfds build do_manual_dataset --imports do_manual_dataset --overwrite
 
-
+# This is for windows specifically
 cd DO_manual_rlds_builder
 set PYTHONPATH=.
 tfds build do_manual_dataset --overwrite
+tfds build do_manual_dataset --imports do_manual_dataset --overwrite
 
 '''
 
@@ -42,7 +41,7 @@ import glob
 import numpy as np
 import tensorflow as tf
 import tensorflow_datasets as tfds
-from do_manual_dataset.conversion_utils import MultiThreadedDatasetBuilder
+from conversion_utils import MultiThreadedDatasetBuilder
 
 def _generate_examples(paths) -> Iterator[Tuple[str, Any]]:
     """Yields episodes from DO_manual dataset paths."""
@@ -76,7 +75,7 @@ def _generate_examples(paths) -> Iterator[Tuple[str, Any]]:
                 # Append step
                 episode.append({
                     'observation': {
-                        'image': image[::-1, ::-1],  # Flip vertically and horizontally if needed
+                        'image': image,
                         'state': robot_state,
                         'joint_state': joint_pose.astype(np.float32),
                     },
@@ -120,7 +119,7 @@ class DoManualDataset(MultiThreadedDatasetBuilder):
                 'steps': tfds.features.Dataset({
                     'observation': tfds.features.FeaturesDict({
                         'image': tfds.features.Image(
-                            shape=(320, 240, 3),
+                            shape=(240, 320, 3),
                             dtype=np.uint8,
                             encoding_format='jpeg',
                             doc='Camera RGB image (flipped).',
@@ -177,3 +176,5 @@ class DoManualDataset(MultiThreadedDatasetBuilder):
         return {
             "train": glob.glob("D:\Malak Doc\Malak Education\MBZUAI\Academic years\Spring 2025\ICL\DO_manual_rlds_builder\do_manual_dataset\DO_manual_dataset\*.hdf5"),
         }
+
+# print("DoManualDataset loaded:", DoManualDataset)

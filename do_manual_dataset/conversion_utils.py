@@ -2,6 +2,7 @@ from typing import Tuple, Any, Dict, Union, Callable, Iterable
 import numpy as np
 import tensorflow as tf
 import tensorflow_datasets as tfds
+# print(tfds.__version__)
 
 import itertools
 from multiprocessing import Pool
@@ -15,6 +16,8 @@ from tensorflow_datasets.core import writer as writer_lib
 from tensorflow_datasets.core import example_serializer
 from tensorflow_datasets.core import dataset_builder
 from tensorflow_datasets.core import file_adapters
+
+# from tensorflow_datasets.core.writer import get_writer
 
 Key = Union[str, int]
 # The nested example dict passed to `features.encode_example`
@@ -54,7 +57,8 @@ class MultiThreadedDatasetBuilder(tfds.core.GeneratorBasedBuilder):
             beam_runner=download_config.beam_runner,
             # file_format=self.info.file_format,
             # shard_config=download_config.get_shard_config(),
-            example_writer_fn=lambda **kwargs: writer_lib.Writer(**kwargs), # <-- add this
+            # example_writer_fn=lambda **kwargs: writer_lib.Writer(**kwargs), # <-- add this
+            example_writer_fn=get_writer,
             split_paths=self._split_paths(),
             parse_function=type(self).PARSE_FCN,
             n_workers=self.N_WORKERS,
@@ -183,17 +187,26 @@ class ParallelSplitBuilder(split_builder_lib.SplitBuilder):
           future: The future containing the `tfds.core.SplitInfo`.
         """
         total_num_examples = None
-        serialized_info = self._features.get_serialized_info()
-        # writer = writer_lib.Writer(
-        writer = self._example_writer(
-            example_writer=None,  # ✅ required dummy arg
-            serializer=example_serializer.ExampleSerializer(serialized_info),
+        # serialized_info = self._features.get_serialized_info()
+        # # writer = writer_lib.Writer(
+        # writer = self._example_writer(
+        #     # example_writer=None,  # ✅ required dummy arg
+        #     serializer=example_serializer.ExampleSerializer(serialized_info),
+        #     filename_template=filename_template,
+        #     hash_salt=split_name,
+        #     disable_shuffling=disable_shuffling,
+        #     # file_format=self._file_format,
+        #     # shard_config=self._shard_config,
+        # )
+        writer = get_writer(
+            features=self._features,
             filename_template=filename_template,
             hash_salt=split_name,
             disable_shuffling=disable_shuffling,
-            # file_format=self._file_format,
-            # shard_config=self._shard_config,
+            file_format=self._file_format if hasattr(self, "_file_format") else "tfrecord",
         )
+
+
 
         del generator  # use parallel generators instead
         paths = self._split_paths[split_name]
@@ -215,10 +228,12 @@ class ParallelSplitBuilder(split_builder_lib.SplitBuilder):
             )
             # write results to shuffler --> this will automatically offload to disk if necessary
             print("Writing conversion results...")
+            example_count = 0
             for result in itertools.chain(*results):
                 key, serialized_example = result
                 writer._shuffler.add(key, serialized_example)
-                writer._num_examples += 1
+                # writer._num_examples += 1
+                example_count += 1
         pool.close()
 
         print("Finishing split conversion...")
