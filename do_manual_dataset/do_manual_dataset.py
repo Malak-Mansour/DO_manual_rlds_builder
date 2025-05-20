@@ -32,6 +32,8 @@ set PYTHONPATH=.
 tfds build do_manual_dataset --overwrite
 tfds build do_manual_dataset --imports do_manual_dataset --overwrite
 
+
+tfds build do_manual_dataset/do_manual_dataset.py --overwrite
 '''
 
 from typing import Iterator, Tuple, Any
@@ -197,4 +199,4 @@ class DoManualDataset(MultiThreadedDatasetBuilder):
         }
 
 # print("DoManualDataset loaded:", DoManualDataset)
-    DATASET_CLASS = DoManualDataset
+DATASET_CLASS = DoManualDataset
