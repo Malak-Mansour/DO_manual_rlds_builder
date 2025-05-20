@@ -3,4 +3,6 @@ wandb
 __pycache__
 .idea
 
-do_manual_dataset/DO_manual_dataset/
+do_manual_dataset/recorded_data_hdf5/
+
+do_manual/recorded_data_hdf5/

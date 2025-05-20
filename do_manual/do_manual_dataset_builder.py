@@ -43,12 +43,14 @@ import glob
 import numpy as np
 import tensorflow as tf
 import tensorflow_datasets as tfds
-from DO_manual_rlds_builder.do_manual_dataset.conversion_utils import MultiThreadedDatasetBuilder
+from do_manual.conversion_utils import MultiThreadedDatasetBuilder
 
 
 def _generate_examples(paths) -> Iterator[Tuple[str, Any]]:
     """Yields episodes from DO_manual dataset paths."""
-    for episode_idx, episode_path in enumerate(paths):
+    # Iterate directly over paths. The episode_path itself (or its basename)
+    # will be used to generate a globally unique key.
+    for episode_path in paths:
         try:
             with h5py.File(episode_path, "r") as F:
                 # Collect all step keys sorted by index
@@ -58,6 +60,8 @@ def _generate_examples(paths) -> Iterator[Tuple[str, Any]]:
                 )
                 
                 if not step_keys:
+                    # Optionally, log or print a message for skipped files
+                    # print(f"Skipping empty or malformed file: {episode_path}")
                     continue  # Skip empty files
 
                 episode = []
@@ -105,15 +109,17 @@ def _generate_examples(paths) -> Iterator[Tuple[str, Any]]:
                             'file_path': episode_path
                         }
                     }
-                    # Use unique string key (episode number) for each example
-                    yield f"episode_{episode_idx}", sample
+                    # Use a unique string key derived from the episode_path.
+                    # os.path.basename() will return the filename, e.g., "place_capsicum_in_pot_episode_4.hdf5"
+                    unique_key = os.path.basename(episode_path)
+                    yield unique_key, sample
                     
         except Exception as e:
             print(f"Error processing file {episode_path}: {e}")
             continue
 
 
-class DoManualDataset(MultiThreadedDatasetBuilder):
+class DoManual(MultiThreadedDatasetBuilder):
     """DatasetBuilder for DO_manual dataset."""
 
     VERSION = tfds.core.Version('1.0.0')
@@ -195,8 +201,8 @@ class DoManualDataset(MultiThreadedDatasetBuilder):
             # "train": glob.glob("D:\Malak Doc\Malak Education\MBZUAI\Academic years\Spring 2025\ICL\DO_manual_rlds_builder\do_manual_dataset\DO_manual_dataset\*.hdf5"),
     def _split_paths(self):
         return {
-            "train": glob.glob(r"/home/dongan/ws/malak/DO_manual_rlds_builder/do_manual_dataset/recorded_data_hdf5/*.hdf5"),
+            "train": glob.glob(r"/home/dongan/ws/malak/rlds_dataset_builder/do_manual/recorded_data_hdf5/*.hdf5"),
         }
 
 # print("DoManualDataset loaded:", DoManualDataset)
-DATASET_CLASS = DoManualDataset
+# DATASET_CLASS = DoManualDataset
