@@ -1,3 +1,9 @@
+run tfds build --overwrite from do_manual/
+
+converted dataset saved at: /home/malak.mansour/tensorflow_datasets
+
+
+
 # RLDS Dataset Conversion
 
 This repo demonstrates how to convert an existing dataset into RLDS format for X-embodiment experiment integration.
