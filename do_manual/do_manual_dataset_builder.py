@@ -24,6 +24,8 @@
 
 cd do_manual
 tfds build --overwrite
+
+converted dataset saved at: /home/malak.mansour/tensorflow_datasets
 '''
 
 from typing import Iterator, Tuple, Any
@@ -194,5 +196,3 @@ class DoManual(MultiThreadedDatasetBuilder):
             "train": glob.glob(r"recorded_data_hdf5/*.hdf5"),
         }
 
-# print("DoManualDataset loaded:", DoManualDataset)
-# DATASET_CLASS = DoManualDataset
