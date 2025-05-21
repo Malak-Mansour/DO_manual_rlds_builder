@@ -22,6 +22,9 @@
 
                 tip_state #1x1 
 
+
+use rlds_env (the one described in the original repo)
+
 cd /home/malak.mansour/Downloads/ICL/DO_manual_rlds_builder/do_manual
 tfds build --overwrite
 
@@ -37,52 +40,47 @@ import tensorflow as tf
 import tensorflow_datasets as tfds
 from do_manual.conversion_utils import MultiThreadedDatasetBuilder
 
-
 def _generate_examples(paths) -> Iterator[Tuple[str, Any]]:
     """Yields episodes from DO_manual dataset paths."""
-    # Iterate directly over paths. The episode_path itself (or its basename)
-    # will be used to generate a globally unique key.
     for episode_path in paths:
         try:
             with h5py.File(episode_path, "r") as F:
-                # Collect all step keys sorted by index
                 step_keys = sorted(
                     [k for k in F.keys() if k.startswith("step_")],
                     key=lambda x: int(x.split("_")[1])
                 )
-                
+
                 if not step_keys:
-                    # Optionally, log or print a message for skipped files
-                    # print(f"Skipping empty or malformed file: {episode_path}")
                     continue  # Skip empty files
 
                 episode = []
                 for i, step_key in enumerate(step_keys):
                     try:
                         obs = F[f"{step_key}/observation"]
-
-                        # Extract camera image
                         image = obs["camera/image"][()]
-
-                        # Extract all right arm sensors
                         joint_pose = obs["right/joint_pose"][()]
                         qpose_euler = obs["right/qpose_euler"][()]
                         qpose_quat = obs["right/qpose_quat"][()]
                         tip_state = obs["right/tip_state"][()]
+                        robot_state = np.concatenate([joint_pose, qpose_euler, qpose_quat, tip_state], axis=0).astype(np.float32)
 
-                        # Combine all state values into one vector
-                        robot_state = np.concatenate([
-                            joint_pose, qpose_euler, qpose_quat, tip_state
-                        ], axis=0).astype(np.float32)
 
-                        # Append step
+                        '''
+                        ACTION extraction: 
+                        base and left are all 0s, extra/buttons is empty but doesnt matter, we only want right
+                        base (3) + buttons (?) + left (7) + right (7)
+                        '''
+                        action_group = F[f"{step_key}/action"]
+                        action_right = action_group["right"][()]
+                        
+
                         episode.append({
                             'observation': {
                                 'image': image,
                                 'state': robot_state,
                                 'joint_state': joint_pose.astype(np.float32),
                             },
-                            'action': np.zeros_like(joint_pose, dtype=np.float32),  # Placeholder
+                            'action': action_right.astype(np.float32),
                             'discount': 1.0,
                             'reward': float(i == (len(step_keys) - 1)),
                             'is_first': i == 0,
@@ -94,21 +92,18 @@ def _generate_examples(paths) -> Iterator[Tuple[str, Any]]:
                         print(f"Error processing step {step_key} in {episode_path}: {e}")
                         continue
 
-                if episode:  # Only yield if we have valid steps
+                if episode:
                     sample = {
                         'steps': episode,
                         'episode_metadata': {
                             'file_path': episode_path
                         }
                     }
-                    # Use a unique string key derived from the episode_path.
-                    # os.path.basename() will return the filename, e.g., "place_capsicum_in_pot_episode_4.hdf5"
-                    unique_key = os.path.basename(episode_path)
-                    yield unique_key, sample
-                    
+                    yield os.path.basename(episode_path), sample
         except Exception as e:
             print(f"Error processing file {episode_path}: {e}")
             continue
+
 
 
 class DoManual(MultiThreadedDatasetBuilder):
@@ -153,9 +148,9 @@ class DoManual(MultiThreadedDatasetBuilder):
                         ),
                     }),
                     'action': tfds.features.Tensor(
-                        shape=(7,),
+                        shape=(7,),  # take right only (7)
                         dtype=np.float32,
-                        doc='Placeholder action vector.',
+                        doc='Concatenated action vector: base (3), buttons (?), left arm (7), right arm (7).',
                     ),
                     'discount': tfds.features.Scalar(
                         dtype=np.float32,
