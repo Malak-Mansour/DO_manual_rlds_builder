@@ -22,7 +22,7 @@
 
                 tip_state #1x1 
 
-cd do_manual
+cd /home/malak.mansour/Downloads/ICL/DO_manual_rlds_builder/do_manual
 tfds build --overwrite
 
 converted dataset saved at: /home/malak.mansour/tensorflow_datasets
