@@ -22,18 +22,8 @@
 
                 tip_state #1x1 
 
-
+cd do_manual
 tfds build --overwrite
-
-
-# This is for windows specifically
-cd DO_manual_rlds_builder
-set PYTHONPATH=.
-tfds build do_manual_dataset --overwrite
-tfds build do_manual_dataset --imports do_manual_dataset --overwrite
-
-
-tfds build do_manual_dataset/do_manual_dataset.py --overwrite
 '''
 
 from typing import Iterator, Tuple, Any
@@ -201,7 +191,7 @@ class DoManual(MultiThreadedDatasetBuilder):
             # "train": glob.glob("D:\Malak Doc\Malak Education\MBZUAI\Academic years\Spring 2025\ICL\DO_manual_rlds_builder\do_manual_dataset\DO_manual_dataset\*.hdf5"),
     def _split_paths(self):
         return {
-            "train": glob.glob(r"/home/dongan/ws/malak/rlds_dataset_builder/do_manual/recorded_data_hdf5/*.hdf5"),
+            "train": glob.glob(r"recorded_data_hdf5/*.hdf5"),
         }
 
 # print("DoManualDataset loaded:", DoManualDataset)
