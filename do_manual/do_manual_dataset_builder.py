@@ -38,6 +38,7 @@ import glob
 import numpy as np
 import tensorflow as tf
 import tensorflow_datasets as tfds
+# from DO_manual_rlds_builder.do_manual.conversion_utils import MultiThreadedDatasetBuilder
 from do_manual.conversion_utils import MultiThreadedDatasetBuilder
 
 def _generate_examples(paths) -> Iterator[Tuple[str, Any]]:
@@ -86,7 +87,7 @@ def _generate_examples(paths) -> Iterator[Tuple[str, Any]]:
                             'is_first': i == 0,
                             'is_last': i == (len(step_keys) - 1),
                             'is_terminal': i == (len(step_keys) - 1),
-                            'language_instruction': "Default instruction",
+                            'language_instruction': F[step_keys[0]].attrs["language_instruction"],
                         })
                     except Exception as e:
                         print(f"Error processing step {step_key} in {episode_path}: {e}")
@@ -189,5 +190,5 @@ class DoManual(MultiThreadedDatasetBuilder):
     def _split_paths(self):
         return {
             "train": glob.glob(r"recorded_data_hdf5/*.hdf5"),
+            # "train": glob.glob(r"DO_manual_rlds_builder/do_manual/recorded_data_hdf5/*.hdf5"),
         }
-
