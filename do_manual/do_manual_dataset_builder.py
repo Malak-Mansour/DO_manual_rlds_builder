@@ -53,7 +53,7 @@ def _generate_examples(paths) -> Iterator[Tuple[str, Any]]:
                                     'eye_in_hand_rgb': obs["eye_in_hand_rgb"][i],
                                     'ee_states': obs["ee_states"][i].astype(np.float32),
                                     'gripper_states': obs["gripper_states"][i].astype(np.float32),
-                                    'joint_postions': obs["joint_postions"][i].astype(np.float32),
+                                    'joint_positions': obs["joint_positions"][i].astype(np.float32),
                                 },
                                 'action': actions[i].astype(np.float32),
                                 'discount': 1.0,
@@ -131,7 +131,7 @@ class DoManual(MultiThreadedDatasetBuilder):
                             dtype=np.float32,
                             doc='Gripper state (open/close).',
                         ),
-                        'joint_postions': tfds.features.Tensor(
+                        'joint_positions': tfds.features.Tensor(
                             shape=(6,),
                             dtype=np.float32,
                             doc='Joint positions of the robot.',
@@ -162,5 +162,5 @@ class DoManual(MultiThreadedDatasetBuilder):
 
     def _split_paths(self):
         return {
-            "train": glob.glob(r"/l/users/malak.mansour/Datasets/do_manual/hdf5/*.hdf5"),
+            "train": glob.glob(r"/l/users/malak.mansour/Datasets/do_manual/hdf5/*.h5"),
         }
