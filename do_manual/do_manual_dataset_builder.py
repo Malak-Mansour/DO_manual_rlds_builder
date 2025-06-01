@@ -11,8 +11,8 @@
 
 
         
-conda activate rlds_env #the one described in the original repo
 cd /home/malak.mansour/Downloads/ICL/DO_manual_rlds_builder/do_manual
+conda activate rlds_env #the one described in the original repo
 
 tfds build --overwrite
 tfds build --data_dir=/l/users/malak.mansour/Datasets/do_manual/rlds/ --overwrite
