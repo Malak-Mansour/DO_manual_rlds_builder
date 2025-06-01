@@ -10,13 +10,16 @@
         o └── joint_positions: shape (N, 6)
 
 
-use rlds_env (the one described in the original repo)
-
+        
+conda activate rlds_env #the one described in the original repo
 cd /home/malak.mansour/Downloads/ICL/DO_manual_rlds_builder/do_manual
+
 tfds build --overwrite
 tfds build --data_dir=/l/users/malak.mansour/Datasets/do_manual/rlds/ --overwrite
 
+
 converted dataset saved at: /l/users/malak.mansour/Datasets/do_manual/rlds/
+
 '''
 
 from typing import Iterator, Tuple, Any
@@ -64,8 +67,9 @@ def _generate_examples(paths) -> Iterator[Tuple[str, Any]]:
                                 'language_instruction': os.path.splitext(os.path.basename(episode_path))[0],
                             }
 
+
                             if teleop_actions is not None:
-                                step_data['teleop_action'] = teleop_actions[i].astype(np.float32)
+                                step_data['teleop_actions'] = teleop_actions[i].astype(np.float32)
 
                             episode.append(step_data)
 
@@ -148,7 +152,7 @@ class DoManual(MultiThreadedDatasetBuilder):
                     'is_last': tfds.features.Scalar(dtype=np.bool_),
                     'is_terminal': tfds.features.Scalar(dtype=np.bool_),
                     'language_instruction': tfds.features.Text(),
-                    'teleop_action': tfds.features.Tensor(
+                    'teleop_actions': tfds.features.Tensor(
                         shape=(7,),
                         dtype=np.float32,
                         doc='Optional relative action vector.'
